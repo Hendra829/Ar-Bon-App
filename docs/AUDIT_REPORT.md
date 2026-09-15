@@ -98,7 +98,7 @@ App.tsx
 
 | ID | Severity | Finding | Recommendation |
 |---|---|---|---|
-| SEC-01 | **High** | Demo auth stores password in AsyncStorage JSON (plaintext at rest) | Replace with salted hash (e.g., server auth) or never store password locally |
+| SEC-01 | **Medium** | Demo auth stores salted SHA-256 password hashes locally (better than plaintext; still not production KDF/backend) | Move auth to backend; use Argon2/scrypt and short-lived tokens |
 | SEC-02 | **High** | No real transport security model (no API yet) | When adding backend, enforce HTTPS, token auth, refresh rotation |
 | SEC-03 | **Medium** | “Encrypted file” is currently a boolean flag, not encryption | Use AES via secure enclave / file encryption library before marking encrypted |
 | SEC-04 | **Medium** | PIN in SecureStore is good; app-lock gate not forced on every resume | Add lock screen interceptor on AppState active |

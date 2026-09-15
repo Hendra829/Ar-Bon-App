@@ -1,8 +1,9 @@
+import * as Crypto from 'expo-crypto';
 import { MIME_CATEGORY_MAP } from '../constants';
 import type { FileCategory, SortDirection, SortOption, StoredFile } from '../types';
 
 export function createId(prefix = 'id'): string {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}_${Crypto.randomUUID()}`;
 }
 
 export function categorizeMimeType(mimeType?: string | null): FileCategory {

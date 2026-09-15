@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import { STORAGE_KEYS } from '../constants';
 import type { AuthCredentials, RegisterPayload, User } from '../types';
@@ -5,7 +6,8 @@ import { createId, isEmailValid } from '../utils';
 import { getJson, getString, removeKey, setJson, setString } from './storageService';
 
 interface StoredUser extends User {
-  password: string;
+  passwordHash: string;
+  passwordSalt: string;
 }
 
 async function getUsers(): Promise<StoredUser[]> {
@@ -14,6 +16,18 @@ async function getUsers(): Promise<StoredUser[]> {
 
 async function saveUsers(users: StoredUser[]): Promise<void> {
   await setJson(STORAGE_KEYS.users, users);
+}
+
+async function hashPassword(password: string, salt: string): Promise<string> {
+  return Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    `${salt}:${password}`,
+  );
+}
+
+function toPublicUser(user: StoredUser): User {
+  const { passwordHash: _hash, passwordSalt: _salt, ...safeUser } = user;
+  return safeUser;
 }
 
 export async function register(payload: RegisterPayload): Promise<User> {
@@ -36,11 +50,15 @@ export async function register(payload: RegisterPayload): Promise<User> {
     throw new Error('Email sudah terdaftar.');
   }
 
+  const passwordSalt = Crypto.randomUUID();
+  const passwordHash = await hashPassword(password, passwordSalt);
+
   const user: StoredUser = {
     id: createId('user'),
     name,
     email,
-    password,
+    passwordHash,
+    passwordSalt,
     createdAt: new Date().toISOString(),
   };
 
@@ -54,22 +72,23 @@ export async function register(payload: RegisterPayload): Promise<User> {
     await removeKey(STORAGE_KEYS.rememberedEmail);
   }
 
-  const { password: _password, ...safeUser } = user;
-  return safeUser;
+  return toPublicUser(user);
 }
 
 export async function login(credentials: AuthCredentials): Promise<User> {
   const email = credentials.email.trim().toLowerCase();
   const users = await getUsers();
-  const matched = users.find(
-    (user) => user.email === email && user.password === credentials.password,
-  );
-
-  if (!matched) {
+  const candidate = users.find((user) => user.email === email);
+  if (!candidate) {
     throw new Error('Email atau password salah.');
   }
 
-  await setSession(matched.id);
+  const passwordHash = await hashPassword(credentials.password, candidate.passwordSalt);
+  if (passwordHash !== candidate.passwordHash) {
+    throw new Error('Email atau password salah.');
+  }
+
+  await setSession(candidate.id);
 
   if (credentials.rememberMe) {
     await setString(STORAGE_KEYS.rememberedEmail, email);
@@ -77,8 +96,7 @@ export async function login(credentials: AuthCredentials): Promise<User> {
     await removeKey(STORAGE_KEYS.rememberedEmail);
   }
 
-  const { password: _password, ...safeUser } = matched;
-  return safeUser;
+  return toPublicUser(candidate);
 }
 
 export async function logout(): Promise<void> {
@@ -98,8 +116,7 @@ export async function getCurrentUser(): Promise<User | null> {
     return null;
   }
 
-  const { password: _password, ...safeUser } = matched;
-  return safeUser;
+  return toPublicUser(matched);
 }
 
 export async function requestPasswordReset(email: string): Promise<string> {
@@ -135,8 +152,7 @@ export async function updateProfile(
   };
   await saveUsers(users);
 
-  const { password: _password, ...safeUser } = users[index];
-  return safeUser;
+  return toPublicUser(users[index]);
 }
 
 export async function getRememberedEmail(): Promise<string | null> {
